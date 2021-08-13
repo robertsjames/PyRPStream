@@ -10,6 +10,10 @@ import queue
 import numpy as np
 import time
 
+import PyRPStream as rp
+export, __all__ = fd.exporter()
+
+
 class ClientCommand:
     """ A command to the client thread.
         Each command key has its associated command type:
@@ -18,10 +22,10 @@ class ClientCommand:
         'RECEIVE':    None
         'CLOSE':      None
     """
-
     def __init__(self, key, command=None):
         self.key = key
         self.command = command
+
 
 
 class ClientReply:
@@ -33,12 +37,13 @@ class ClientReply:
                       data string, for others None
         'MESSAGE':    Status message
     """
-
     def __init__(self, key, reply=None):
         self.key = key
         self.reply = reply
 
 
+
+@export
 class SocketClientThread(threading.Thread):
     """ Implements the threading (run, join, etc.): the thread can be
         controlled via the cmd_q queue attribute. Replies are placed in
@@ -92,11 +97,13 @@ class SocketClientThread(threading.Thread):
                 # Do nothing if no commands sent
                 continue
 
+
     def join(self, timeout=None):
         """ Invoking this will end the thread.
         """
         self.alive.clear()
         threading.Thread.join(self, timeout)
+
 
     def _handle_CONNECT(self, client_command):
         """ Attempt to connect to the socket, if not already connected
@@ -117,6 +124,7 @@ class SocketClientThread(threading.Thread):
             # Return error if we can't connect
             self.reply_q.put(self._error_reply(str(e)))
             self.connected = 0
+
 
     def _handle_RECEIVE(self, client_command):
         """ Read from the socket: discard the header information, then send
@@ -146,6 +154,7 @@ class SocketClientThread(threading.Thread):
             self.reply_q.put(self._error_reply(str(e)))
             self.connected = 0
 
+
     def _receieve_bytes(self, n, socket):
         """ Receive n bytes from socket.
         """
@@ -158,6 +167,7 @@ class SocketClientThread(threading.Thread):
 
         return tdata
 
+
     def _handle_CLOSE(self, client_command):
         """ Close connection to the socket.
         """
@@ -166,101 +176,14 @@ class SocketClientThread(threading.Thread):
         self.reply_q.put(self._message_reply('Socket closed'))
         self.connected = 0
 
+
     def _error_reply(self, errstr):
         return ClientReply('ERROR', errstr)
+
 
     def _message_reply(self, data=None):
         return ClientReply('MESSAGE', data)
 
+
     def _data_reply(self, data=None):
         return ClientReply('DATA', data)
-
-
-#------------------------------------------------------------------------------
-if __name__ == '__main__':
-    try:
-        acq_time = float(input('Acquisition time in seconds:'))
-        assert(acq_time > 0)
-    except:
-        raise TypeError('Invalid acquisition time value')
-
-    # Number of messages to use for data rate calculation
-    n_samp = 10
-
-    # Connection information
-    SERVER_ADDR = 'rp-f05a98.local', 8900
-
-    # Start the socket thread
-    client = SocketClientThread()
-    client.start()
-
-    # Attempt to CONNECT to the socket
-    print('Trying to CONNECT to socket')
-    # Make 10 attempts, then give up
-    for i in range(10):
-        client.cmd_q.put(ClientCommand('CONNECT', SERVER_ADDR))
-        client_reply = client.reply_q.get()
-        print(client_reply.reply)
-        if client_reply.key == 'ERROR':
-            print('Trying to CONNECT again')
-        else:
-            break
-
-    # Check if we are connected by attempting to RECEIVE
-    client.cmd_q.put(ClientCommand('RECEIVE'))
-    client_reply = client.reply_q.get()
-    if client_reply.key == 'ERROR':
-        # We aren't connected: exit
-        client.join()
-        raise OSError('Repeatedly failed to execute CONNECT: exiting')
-    else:
-        # We are connected: continue
-        print('Starting main acquisition')
-
-    time.sleep(1)
-
-    t_start = time.time()
-    t_prev = t_start
-    i = 0
-
-    # Loop to RECEIVE DATA, unless an ERROR occurs
-    while 1:
-        # Get reply from reply queue
-        client_reply = client.reply_q.get()
-
-        if client_reply.key == 'ERROR':
-            # Exit if we receive ERROR
-            print(client_reply.reply)
-            client.join()
-            raise OSError('Error during RECEIVE: exiting')
-
-        elif client_reply.key == 'DATA':
-            # If we have DATA, exit if we have exceeded acquisition time
-            t = client_reply.reply['timestamp']
-            if t - t_start > acq_time:
-                break
-
-            # Otherwise, save the data to files
-            np.savetxt(f'red_pitaya_data_ch1_{i}.txt', np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16))
-            np.savetxt(f'red_pitaya_data_ch2_{i}.txt', np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16))
-
-            # Calculate the data rate every n_samp messages
-            if i == n_samp:
-                print('Data rate is ', n_samp * 2**16 / (t - t_prev) / 1024 / 1024)  # MBytes/second
-                i = 0
-                t_prev = t
-
-            i += 1
-
-    # CLOSE the socket after a successful acquisition run
-    client.cmd_q.put(ClientCommand('CLOSE'))
-
-    time.sleep(1)
-
-    # Get reply upon socket closure
-    client_reply = client.reply_q.get()
-    print(client_reply.reply)
-
-    # End the thread to exit the program
-    client.join()
-    print('Data acquisition successful: exiting')

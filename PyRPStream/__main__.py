@@ -9,12 +9,14 @@ import requests
 import json
 import keyboard
 
+
 class Websocket:
     def __init__(self, socket_url=None):
         self.rp_ip = 'rp-f05a98.local' if socket_url == '' else socket_url
         self.socket_url = 'ws://' + self.rp_ip + '/wss'
         self.start_app_url = 'http://' + self.rp_ip + '/bazaar?start=streaming_manager'
         self.stop_app_url = 'http://' + self.rp_ip + '/bazaar?stop=streaming_manager'
+
 
 
 #------------------------------------------------------------------------------
