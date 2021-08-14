@@ -10,4 +10,5 @@ def exporter():
     return decorator, all_
 
 
+export, __all__ = exporter()
 __all__.extend(['exporter'])

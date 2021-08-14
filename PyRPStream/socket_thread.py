@@ -11,7 +11,7 @@ import numpy as np
 import time
 
 import PyRPStream as rp
-export, __all__ = fd.exporter()
+export, __all__ = rp.exporter()
 
 
 class ClientCommand:

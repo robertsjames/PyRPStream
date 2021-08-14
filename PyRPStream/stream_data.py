@@ -4,11 +4,13 @@
 Adapted from script by https://github.com/awmlee
 """
 
-import socket
-import threading
-import queue
-import numpy as np
-import time
+import PyRPStream as rp
+export, __all__ = rp.exporter()
+
+
+@export
+def test():
+    client = rp.SocketClientThread()
 
 # if __name__ == '__main__':
 #     try:
