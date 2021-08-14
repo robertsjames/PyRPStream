@@ -103,6 +103,8 @@ class SocketClientThread(threading.Thread):
     def join(self, timeout=None):
         """ Invoking this will end the thread.
         """
+        print('Ending socket thread')
+
         self.alive.clear()
         threading.Thread.join(self, timeout)
 

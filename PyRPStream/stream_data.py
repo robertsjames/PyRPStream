@@ -11,35 +11,69 @@ export, __all__ = rp.exporter()
 
 
 @export
-def connect():
-    # Connection information
-    SERVER_ADDR = 'rp-f05a98.local', 8900
+class RPDevice:
+    """
+    """
+    def __init__(self):
+        # Connection information
+        self.address_port = ('rp-f05a98.local', 8900)
+        # Socket thread
+        self.client = rp.SocketClientThread()
+        # Start the socket thread
+        self.client.start()
 
-    # Start the socket thread
-    client = rp.SocketClientThread()
-    client.start()
 
-    # Attempt to CONNECT to the socket
-    print('Trying to CONNECT to socket')
-    # Make 10 attempts, then give up
-    for i in range(10):
-        client.cmd_q.put(rp.ClientCommand('CONNECT', SERVER_ADDR))
-        client_reply = client.reply_q.get()
-        print(client_reply.reply)
+    def connect(self):
+        """
+        """
+        if not self.client.alive.isSet():
+            # Create new socket thread
+            self.client = rp.SocketClientThread()
+            # Start the socket thread
+            self.client.start()
+
+        print('Trying to CONNECT to socket')
+        # Make 10 attempts, then give up
+        for i in range(10):
+            self.client.cmd_q.put(rp.ClientCommand('CONNECT', self.address_port))
+            client_reply = self.client.reply_q.get()
+
+            if client_reply.key == 'ERROR':
+                print('Trying to CONNECT again')
+            elif client_reply.key == 'MESSAGE':
+                print(client_reply.reply)
+                break
+            else:
+                break
+
+        # Check if we are connected by attempting to RECEIVE
+        self.client.cmd_q.put(rp.ClientCommand('RECEIVE'))
+        client_reply = self.client.reply_q.get()
         if client_reply.key == 'ERROR':
-            print('Trying to CONNECT again')
-        else:
-            break
+            # We aren't connected: exit
+            self.client.join()
+            raise OSError('Repeatedly failed to execute CONNECT: exiting')
 
-    # Check if we are connected by attempting to RECEIVE
-    client.cmd_q.put(rp.ClientCommand('RECEIVE'))
-    client_reply = client.reply_q.get()
-    if client_reply.key == 'ERROR':
-        # We aren't connected: exit
-        client.join()
-        raise OSError('Repeatedly failed to execute CONNECT: exiting')
+        time.sleep(1)
 
-    time.sleep(1)
+
+    def disconnect(self):
+        """
+        """
+        print('Trying to CLOSE socket connection')
+        if not self.client.alive.isSet():
+            return
+
+        self.client.cmd_q.put(rp.ClientCommand('CLOSE'))
+
+        time.sleep(1)
+
+        # Get reply upon socket closure
+        client_reply = self.client.reply_q.get()
+        print(client_reply.reply)
+
+        # End the thread
+        self.client.join()
 
 # if __name__ == '__main__':
 #     try:
@@ -84,15 +118,3 @@ def connect():
 #
 #             i += 1
 #
-#     # CLOSE the socket after a successful acquisition run
-#     client.cmd_q.put(ClientCommand('CLOSE'))
-#
-#     time.sleep(1)
-#
-#     # Get reply upon socket closure
-#     client_reply = client.reply_q.get()
-#     print(client_reply.reply)
-#
-#     # End the thread to exit the program
-#     client.join()
-#     print('Data acquisition successful: exiting')
