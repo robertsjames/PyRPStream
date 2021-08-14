@@ -4,13 +4,42 @@
 Adapted from script by https://github.com/awmlee
 """
 
+import time
+
 import PyRPStream as rp
 export, __all__ = rp.exporter()
 
 
 @export
-def test():
+def connect():
+    # Connection information
+    SERVER_ADDR = 'rp-f05a98.local', 8900
+
+    # Start the socket thread
     client = rp.SocketClientThread()
+    client.start()
+
+    # Attempt to CONNECT to the socket
+    print('Trying to CONNECT to socket')
+    # Make 10 attempts, then give up
+    for i in range(10):
+        client.cmd_q.put(rp.ClientCommand('CONNECT', SERVER_ADDR))
+        client_reply = client.reply_q.get()
+        print(client_reply.reply)
+        if client_reply.key == 'ERROR':
+            print('Trying to CONNECT again')
+        else:
+            break
+
+    # Check if we are connected by attempting to RECEIVE
+    client.cmd_q.put(rp.ClientCommand('RECEIVE'))
+    client_reply = client.reply_q.get()
+    if client_reply.key == 'ERROR':
+        # We aren't connected: exit
+        client.join()
+        raise OSError('Repeatedly failed to execute CONNECT: exiting')
+
+    time.sleep(1)
 
 # if __name__ == '__main__':
 #     try:
@@ -21,38 +50,6 @@ def test():
 #
 #     # Number of messages to use for data rate calculation
 #     n_samp = 10
-#
-#     # Connection information
-#     SERVER_ADDR = 'rp-f05a98.local', 8900
-#
-#     # Start the socket thread
-#     client = SocketClientThread()
-#     client.start()
-#
-#     # Attempt to CONNECT to the socket
-#     print('Trying to CONNECT to socket')
-#     # Make 10 attempts, then give up
-#     for i in range(10):
-#         client.cmd_q.put(ClientCommand('CONNECT', SERVER_ADDR))
-#         client_reply = client.reply_q.get()
-#         print(client_reply.reply)
-#         if client_reply.key == 'ERROR':
-#             print('Trying to CONNECT again')
-#         else:
-#             break
-#
-#     # Check if we are connected by attempting to RECEIVE
-#     client.cmd_q.put(ClientCommand('RECEIVE'))
-#     client_reply = client.reply_q.get()
-#     if client_reply.key == 'ERROR':
-#         # We aren't connected: exit
-#         client.join()
-#         raise OSError('Repeatedly failed to execute CONNECT: exiting')
-#     else:
-#         # We are connected: continue
-#         print('Starting main acquisition')
-#
-#     time.sleep(1)
 #
 #     t_start = time.time()
 #     t_prev = t_start

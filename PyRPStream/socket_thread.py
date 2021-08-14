@@ -14,6 +14,7 @@ import PyRPStream as rp
 export, __all__ = rp.exporter()
 
 
+@export
 class ClientCommand:
     """ A command to the client thread.
         Each command key has its associated command type:
@@ -28,6 +29,7 @@ class ClientCommand:
 
 
 
+@export
 class ClientReply:
     """ A reply from the client thread.
         Each reply key has its associated reply type:
