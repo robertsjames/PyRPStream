@@ -40,6 +40,7 @@ class RPDevice:
             client_reply = self.client.reply_q.get()
 
             if client_reply.key == 'ERROR':
+                print(client_reply.reply)
                 print('Trying to CONNECT again')
             elif client_reply.key == 'MESSAGE':
                 print(client_reply.reply)
@@ -52,6 +53,7 @@ class RPDevice:
         client_reply = self.client.reply_q.get()
         if client_reply.key == 'ERROR':
             # We aren't connected: end the thread
+            print(client_reply.reply)
             self.client.join()
             raise OSError('Repeatedly failed to execute CONNECT: exiting')
 
@@ -84,7 +86,7 @@ class RPDevice:
         self.client.join()
 
 
-    def acquire(self, acq_time):
+    def acquire(self, acq_time, file_stamps='timestamps'):
         """
         """
         if not self.client.alive.isSet():
@@ -95,6 +97,15 @@ class RPDevice:
             # We aren't connected: end the thread
             self.client.join()
             raise OSError('Cannot acquire when not connected to device')
+
+        try:
+            assert(isinstance(file_stamps, str))
+        except:
+            raise TypeError('file_stamps must be string')
+        try:
+            assert(file_stamps == 'timestamps' or 'numerical')
+        except:
+            raise ValueError('file_stamps must be either timestamps or numerical')
 
         try:
             assert(acq_time > 0)
@@ -126,8 +137,12 @@ class RPDevice:
                     break
 
                 # Otherwise, save the data to files
-                np.savetxt(f'red_pitaya_data_ch1_{i}.txt', np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16))
-                np.savetxt(f'red_pitaya_data_ch2_{i}.txt', np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16))
+                if file_stamps == 'timestamps':
+                    np.savetxt(f'red_pitaya_data_ch1_{t}.txt', np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16))
+                    np.savetxt(f'red_pitaya_data_ch2_{t}.txt', np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16))
+                else:
+                    np.savetxt(f'red_pitaya_data_ch1_{i}.txt', np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16))
+                    np.savetxt(f'red_pitaya_data_ch2_{i}.txt', np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16))
 
                 # Calculate the data rate every n_samp messages
                 if i == n_samp:
