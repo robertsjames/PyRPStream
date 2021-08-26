@@ -86,7 +86,7 @@ class RPDevice:
         self.client.join()
 
 
-    def acquire(self, acq_time, file_stamps='timestamps'):
+    def acquire(self, acq_time, file_size=1e6):
         """
         """
         if not self.client.alive.isSet():
@@ -99,15 +99,6 @@ class RPDevice:
             raise OSError('Cannot acquire when not connected to device')
 
         try:
-            assert(isinstance(file_stamps, str))
-        except:
-            raise TypeError('file_stamps must be string')
-        try:
-            assert(file_stamps == 'timestamps' or 'numerical')
-        except:
-            raise ValueError('file_stamps must be either timestamps or numerical')
-
-        try:
             assert(acq_time > 0)
         except:
             raise TypeError('Invalid acquisition time value')
@@ -118,6 +109,13 @@ class RPDevice:
         t_start = time.time()
         t_prev = t_start
         i = 0
+
+        ch1_data = []
+        ch2_data = []
+        ch1_reads = 0
+        ch2_reads = 0
+        t_file_ch1 = None
+        t_file_ch2 = None
 
         # Loop to RECEIVE DATA, unless an ERROR occurs
         while True:
@@ -136,13 +134,29 @@ class RPDevice:
                 if t - t_start > acq_time:
                     break
 
-                # Otherwise, save the data to files
-                if file_stamps == 'timestamps':
-                    np.savetxt(f'red_pitaya_data_ch1_{t}.txt', np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16))
-                    np.savetxt(f'red_pitaya_data_ch2_{t}.txt', np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16))
-                else:
-                    np.savetxt(f'red_pitaya_data_ch1_{i}.txt', np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16))
-                    np.savetxt(f'red_pitaya_data_ch2_{i}.txt', np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16))
+                # Otherwise,
+                if ch1_reads == 0:
+                    t_file_ch1 = t
+                if ch2_reads == 0:
+                    t_file_ch2 = t
+
+                ch1_data.append(client_reply.reply['ch1_data'])
+                ch2_data.apend(client_reply.reply['ch2_data'])
+                ch1_reads += 1
+                ch2_reads += 1
+
+                if (ch1_reads * self.client.ch1_size > file_size):
+                    f=open(f'red_pitaya_data_ch1_{t_file_ch1}', 'wb')
+                    f.write(ch1_data)
+                    f.close()
+                    ch1_data = []
+                    ch1_reads = 0
+                if (ch2_reads * self.client.ch2_size > file_size):
+                    f=open(f'red_pitaya_data_ch2_{t_file_ch2}', 'wb')
+                    f.write(ch2_data)
+                    f.close()
+                    ch2_data = []
+                    ch2_reads = 0
 
                 # Calculate the data rate every n_samp messages
                 if i == n_samp:
@@ -151,3 +165,47 @@ class RPDevice:
                     t_prev = t
 
                 i += 1
+
+
+    def acquire_calib(self):
+        """
+        """
+        if not self.client.alive.isSet():
+            # There is no thread
+            raise OSError('Cannot calibrate when not connected to device')
+
+        if not self.client.connected:
+            # We aren't connected: end the thread
+            self.client.join()
+            raise OSError('Cannot calibrate when not connected to device')
+
+        t_start = time.time()
+        t_prev = t_start
+
+        ch1_data = []
+        ch2_data = []
+
+        # Loop to RECEIVE DATA, unless an ERROR occurs
+        while True:
+            # Get reply from reply queue
+            client_reply = self.client.reply_q.get()
+
+            if client_reply.key == 'ERROR':
+                # End the thread if we receive ERROR
+                print(client_reply.reply)
+                self.client.join()
+                raise OSError('Error during RECEIVE: exiting')
+
+            elif client_reply.key == 'DATA':
+                # If we have DATA, exit if we have exceeded acquisition time
+                t = client_reply.reply['timestamp']
+                if t - t_start > 1: # Acquire for 1 second
+                    break
+
+                # Otherwise, append data
+                ch1_data.append(np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16))
+                ch2_data.append(np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16))
+
+        # Save calibration data to files
+        np.savetxt('red_pitaya_data_ch1_calib.txt', ch1_data)
+        np.savetxt('red_pitaya_data_ch2_calib.txt', ch2_data)
