@@ -6,6 +6,7 @@ Adapted from script by https://github.com/awmlee
 
 import numpy as np
 import time
+import os
 
 import PyRPStream as rp
 export, __all__ = rp.exporter()
@@ -15,9 +16,27 @@ export, __all__ = rp.exporter()
 class RPDevice:
     """
     """
-    def __init__(self):
+    def __init__(self, name, ignore_calib=False):
+        # Device name
+        self.name = name
+        # Calibration parameters
+        if os.path.isfile(self.name + '_calib.txt') and not ignore_calib:
+            file = open(self.name + '_calib.txt', 'r')
+            calib_consts = file.readlines()
+            self.ch1_offset = float(calib_consts[0])
+            self.ch1_gain = float(calib_consts[1])
+            self.ch2_offset = float(calib_consts[2])
+            self.ch2_gain = float(calib_consts[3])
+        else:
+            self.ch1_offset = 0
+            self.ch1_gain = 1
+            self.ch2_offset = 0
+            self.ch2_gain = 1
         # Connection information
         self.address_port = ('rp-f05a98.local', 8900)
+        # Device information
+        self.input_range_V = 2
+        self.input_bits = 16
         # Socket thread
         self.client = rp.SocketClientThread()
         # Start the socket thread
@@ -203,8 +222,12 @@ class RPDevice:
                     break
 
                 # Otherwise, append data
-                ch1_data.append(np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16))
-                ch2_data.append(np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16))
+                ch1_data_no_calib = np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16)
+                ch2_data_no_calib = np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16)
+                ch1_data_calib = self.ch1_gain * (ch1_data_no_calib  * self.input_range_V / 2 ** self.input_bits + self.ch1_offset)
+                ch2_data_calib = self.ch2_gain * (ch2_data_no_calib * self.input_range_V / 2 ** self.input_bits + self.ch2_offset)
+                ch1_data.append(ch1_data_calib)
+                ch2_data.append(ch2_data_calib)
 
         # Save calibration data to files
         np.savetxt('red_pitaya_data_ch1_calib.txt', ch1_data)
