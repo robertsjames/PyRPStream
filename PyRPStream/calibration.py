@@ -3,7 +3,6 @@
 """
 
 import numpy as np
-import time
 import paramiko
 import subprocess
 
@@ -31,9 +30,10 @@ class CalibUtil:
     def reset_calib(self):
         """
         """
-        # ssh = paramiko.SSHClient()
-        # ssh.connect(self.user_host_password[1], username=self.user_host_password[0], password=self.user_host_password[2])
-        # ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command('calib -d')
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(self.user_host_password[1], username=self.user_host_password[0], password=self.user_host_password[2])
+        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command('/opt/redpitaya/bin/calib -d')
         subprocess.Popen("rm -f {filename}".format(filename=self.device_name + '_calib.txt'),
                          shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
