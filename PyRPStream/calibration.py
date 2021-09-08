@@ -51,19 +51,24 @@ class CalibUtil:
         """
         print('NOTE: this will only work if inputs are grounded')
 
-        # self.device.connect()
-        # self.device.acquire_calib()
+        self.device.connect()
+        self.device.acquire_calib()
         self.device.disconnect()
 
-        data = np.loadtxt('red_pitaya_data_ch1_offset.txt')
+        data = np.loadtxt('red_pitaya_data_ch1_calib.txt')
         mean_reading = np.mean(data)
         offset = - mean_reading * self.device.input_range_V / (2 ** self.device.input_bits)
         self.ch1_offset = offset
 
-        data = np.loadtxt('red_pitaya_data_ch2_offset.txt')
+        data = np.loadtxt('red_pitaya_data_ch2_calib.txt')
         mean_reading = np.mean(data)
         offset = - mean_reading * self.device.input_range_V / (2 ** self.device.input_bits)
         self.ch2_offset = offset
+
+        subprocess.Popen("rm -f red_pitaya_data_ch1_calib.txt",
+                         shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        subprocess.Popen("rm -f red_pitaya_data_ch2_calib.txt",
+                         shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
 
     def DC_inputs(self):
@@ -71,16 +76,21 @@ class CalibUtil:
         """
         print('NOTE: this will only work if inputs are given 0.5 V DC signals')
 
-        # self.device.connect()
-        # self.device.acquire_calib()
+        self.device.connect()
+        self.device.acquire_calib()
         self.device.disconnect()
 
-        data = np.loadtxt('red_pitaya_data_ch1_gain.txt')
+        data = np.loadtxt('red_pitaya_data_ch1_calib.txt')
         mean_reading = np.mean(data)
         gain = 0.5 / (mean_reading * self.device.input_range_V / 2 ** self.device.input_bits + self.ch1_offset)
         self.ch1_gain = gain
 
-        data = np.loadtxt('red_pitaya_data_ch2_gain.txt')
+        data = np.loadtxt('red_pitaya_data_ch2_calib.txt')
         mean_reading = np.mean(data)
         gain = 0.5 / (mean_reading * self.device.input_range_V / 2 ** self.device.input_bits + self.ch2_offset)
         self.ch2_gain = gain
+
+        subprocess.Popen("rm -f red_pitaya_data_ch1_calib.txt",
+                         shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        subprocess.Popen("rm -f red_pitaya_data_ch2_calib.txt",
+                         shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
