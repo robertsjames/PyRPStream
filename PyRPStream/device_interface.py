@@ -129,8 +129,8 @@ class RPDevice:
         t_prev = t_start
         i = 0
 
-        ch1_data = []
-        ch2_data = []
+        ch1_data = bytearray()
+        ch2_data = bytearray()
         ch1_reads = 0
         ch2_reads = 0
         t_file_ch1 = None
@@ -159,22 +159,22 @@ class RPDevice:
                 if ch2_reads == 0:
                     t_file_ch2 = t
 
-                ch1_data.append(client_reply.reply['ch1_data'])
-                ch2_data.apend(client_reply.reply['ch2_data'])
+                ch1_data += client_reply.reply['ch1_data']
+                ch2_data += client_reply.reply['ch2_data']
                 ch1_reads += 1
                 ch2_reads += 1
 
                 if (ch1_reads * self.client.ch1_size > file_size):
-                    f=open(f'red_pitaya_data_ch1_{t_file_ch1}', 'wb')
+                    f=open(f'red_pitaya_data_ch1_{t_file_ch1}.bin', 'wb')
                     f.write(ch1_data)
                     f.close()
-                    ch1_data = []
+                    ch1_data = bytearray()
                     ch1_reads = 0
                 if (ch2_reads * self.client.ch2_size > file_size):
-                    f=open(f'red_pitaya_data_ch2_{t_file_ch2}', 'wb')
+                    f=open(f'red_pitaya_data_ch2_{t_file_ch2}.bin', 'wb')
                     f.write(ch2_data)
                     f.close()
-                    ch2_data = []
+                    ch2_data = bytearray()
                     ch2_reads = 0
 
                 # Calculate the data rate every n_samp messages
