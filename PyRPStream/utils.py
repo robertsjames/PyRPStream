@@ -1,3 +1,7 @@
+"""
+08/21, R James, F Alder
+"""
+
 def exporter():
     """Export utility modified from https://stackoverflow.com/a/41895194.
     """

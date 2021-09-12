@@ -3,7 +3,6 @@
 
 Adapted from script by https://github.com/awmlee
 """
-import time
 from websocket import create_connection
 import requests
 import json
