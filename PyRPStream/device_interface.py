@@ -16,11 +16,11 @@ export, __all__ = rp.exporter()
 class RPDevice:
     """
     """
-    def __init__(self, name, ignore_calib=False):
+    def __init__(self, name):
         # Device name
         self.name = name
         # Calibration parameters
-        if os.path.isfile(self.name + '_calib.txt') and not ignore_calib:
+        if os.path.isfile(self.name + '_calib.txt'):
             file = open(self.name + '_calib.txt', 'r')
             calib_consts = file.readlines()
             self.ch1_offset = float(calib_consts[0])
@@ -198,7 +198,7 @@ class RPDevice:
                 i += 1
 
 
-    def acquire_calib(self):
+    def acquire_calib(self, acquire_raw=False):
         """
         """
         if not self.client.alive.isSet():
@@ -223,10 +223,8 @@ class RPDevice:
             # If we have DATA, get the start acquisition time
             t_start = client_reply.reply['timestamp']
 
-        t_prev = t_start
-
-        ch1_data = []
-        ch2_data = []
+        ch1_data_store = []
+        ch2_data_store = []
 
         # Loop to RECEIVE DATA, unless an ERROR occurs
         while True:
@@ -246,13 +244,17 @@ class RPDevice:
                     break
 
                 # Otherwise, append data
-                ch1_data_no_calib = np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16)
-                ch2_data_no_calib = np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16)
-                ch1_data_calib = self.ch1_gain * (ch1_data_no_calib * self.input_range_V / 2. ** self.input_bits + self.ch1_offset)
-                ch2_data_calib = self.ch2_gain * (ch2_data_no_calib * self.input_range_V / 2. ** self.input_bits + self.ch2_offset)
-                ch1_data = np.append(ch1_data, ch1_data_calib)
-                ch2_data = np.append(ch2_data, ch2_data_calib)
+                ch1_data = np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16)
+                ch2_data= np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16)
+
+                if not acquire_raw:
+                # Convert from ADC -> V, with calibration factors, by default
+                    ch1_data = self.ch1_gain * (ch1_data * self.input_range_V / 2. ** self.input_bits + self.ch1_offset)
+                    ch2_data = self.ch2_gain * (ch2_data * self.input_range_V / 2. ** self.input_bits + self.ch2_offset)
+
+                ch1_data_store = np.append(ch1_data_store, ch1_data)
+                ch2_data_store = np.append(ch2_data_store, ch2_data)
 
         # Save calibration data to files
-        np.savetxt('red_pitaya_data_ch1_calib.txt', ch1_data)
-        np.savetxt('red_pitaya_data_ch2_calib.txt', ch2_data)
+        np.savetxt('red_pitaya_data_ch1_calib.txt', ch1_data_store)
+        np.savetxt('red_pitaya_data_ch2_calib.txt', ch2_data_store)

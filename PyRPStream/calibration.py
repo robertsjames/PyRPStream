@@ -17,14 +17,14 @@ class CalibUtil:
     def __init__(self, device_name):
         # RP device
         self.device_name = device_name
-        self.device = rp.RPDevice(device_name, ignore_calib=True)
+        self.device = rp.RPDevice(device_name)
         # RP device SSH connection information
         self.user_host_password = ('root', 'rp-f05a98.local', 'root')
         # Calibration parameters
-        self.ch1_offset = 0
-        self.ch1_gain = 1
-        self.ch2_offset = 0
-        self.ch2_gain = 1
+        self.ch1_offset = 0.
+        self.ch1_gain = 1.
+        self.ch2_offset = 0.
+        self.ch2_gain = 1.
 
 
     def reset_calib(self):
@@ -52,17 +52,17 @@ class CalibUtil:
         print('NOTE: this will only work if inputs are grounded')
 
         self.device.connect()
-        self.device.acquire_calib()
+        self.device.acquire_calib(acquire_raw=True)
         self.device.disconnect()
 
         data = np.loadtxt('red_pitaya_data_ch1_calib.txt')
         mean_reading = np.mean(data)
-        offset = - mean_reading * self.device.input_range_V / (2 ** self.device.input_bits)
+        offset = - mean_reading * self.device.input_range_V / (2. ** self.device.input_bits)
         self.ch1_offset = offset
 
         data = np.loadtxt('red_pitaya_data_ch2_calib.txt')
         mean_reading = np.mean(data)
-        offset = - mean_reading * self.device.input_range_V / (2 ** self.device.input_bits)
+        offset = - mean_reading * self.device.input_range_V / (2. ** self.device.input_bits)
         self.ch2_offset = offset
 
         subprocess.Popen("rm -f red_pitaya_data_ch1_calib.txt",
@@ -77,17 +77,17 @@ class CalibUtil:
         print('NOTE: this will only work if inputs are given 0.5 V DC signals')
 
         self.device.connect()
-        self.device.acquire_calib()
+        self.device.acquire_calib(acquire_raw=True)
         self.device.disconnect()
 
         data = np.loadtxt('red_pitaya_data_ch1_calib.txt')
         mean_reading = np.mean(data)
-        gain = 0.5 / (mean_reading * self.device.input_range_V / 2 ** self.device.input_bits + self.ch1_offset)
+        gain = 0.5 / (mean_reading * self.device.input_range_V / 2. ** self.device.input_bits + self.ch1_offset)
         self.ch1_gain = gain
 
         data = np.loadtxt('red_pitaya_data_ch2_calib.txt')
         mean_reading = np.mean(data)
-        gain = 0.5 / (mean_reading * self.device.input_range_V / 2 ** self.device.input_bits + self.ch2_offset)
+        gain = 0.5 / (mean_reading * self.device.input_range_V / 2. ** self.device.input_bits + self.ch2_offset)
         self.ch2_gain = gain
 
         subprocess.Popen("rm -f red_pitaya_data_ch1_calib.txt",
