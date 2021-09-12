@@ -125,7 +125,19 @@ class RPDevice:
         # Number of messages to use for data rate calculation
         n_samp = 10
 
-        t_start = time.time()
+        # Get reply from reply queue to obtain start time
+        client_reply = self.client.reply_q.get()
+
+        if client_reply.key == 'ERROR':
+            # End the thread if we receive ERROR
+            print(client_reply.reply)
+            self.client.join()
+            raise OSError('Error during RECEIVE: exiting')
+
+        elif client_reply.key == 'DATA':
+            # If we have DATA, get the start acquisition time
+            t_start = client_reply.reply['timestamp']
+
         t_prev = t_start
         i = 0
 
@@ -198,7 +210,19 @@ class RPDevice:
             self.client.join()
             raise OSError('Cannot calibrate when not connected to device')
 
-        t_start = time.time()
+        # Get reply from reply queue to obtain start time
+        client_reply = self.client.reply_q.get()
+
+        if client_reply.key == 'ERROR':
+            # End the thread if we receive ERROR
+            print(client_reply.reply)
+            self.client.join()
+            raise OSError('Error during RECEIVE: exiting')
+
+        elif client_reply.key == 'DATA':
+            # If we have DATA, get the start acquisition time
+            t_start = client_reply.reply['timestamp']
+
         t_prev = t_start
 
         ch1_data = []
