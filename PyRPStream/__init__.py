@@ -6,3 +6,4 @@ from .utils import *
 from .socket_thread import *
 from .device_interface import *
 from .calibration import *
+from .decode import *

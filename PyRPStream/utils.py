@@ -2,6 +2,10 @@
 08/21, R James, F Alder
 """
 
+import numpy as np
+
+DTYPE = np.float32
+
 def exporter():
     """Export utility modified from https://stackoverflow.com/a/41895194.
     """
@@ -16,3 +20,8 @@ def exporter():
 
 export, __all__ = exporter()
 __all__.extend(['exporter'])
+
+
+@export
+def dtype():
+    return DTYPE
