@@ -33,7 +33,7 @@ ws = create_connection(WS.socket_url)
 
 # Set websocket parameters
 setbits = ({'parameters': {'SS_RESOLUTION': {'value': 2}, 'in_command': {'value': 'send_all_params'}}})
-setrate = ({'parameters': {'SS_RATE': {'value': 800}, 'in_command': {'value': 'send_all_params'}}})
+setrate = ({'parameters': {'SS_RATE': {'value': 120}, 'in_command': {'value': 'send_all_params'}}})
 setdualchan = ({'parameters': {'SS_CHANNEL': {'value': 3},' in_command': {'value': 'send_all_params'}}})
 ws.send(json.dumps(setbits))
 ws.send(json.dumps(setrate))

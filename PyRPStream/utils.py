@@ -4,7 +4,7 @@
 
 import numpy as np
 
-DTYPE = np.float32
+DTYPE = np.float16
 
 def exporter():
     """Export utility modified from https://stackoverflow.com/a/41895194.

@@ -164,11 +164,11 @@ class RPDevice:
                 t = client_reply.reply['timestamp']
                 if t - t_start > acq_time:
                     data_decoded = np.frombuffer(ch1_data, dtype=np.int16)
-                    data_calib = np.float32(self.ch1_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch1_offset))
+                    data_calib = np.float16(self.ch1_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch1_offset))
                     data_calib.tofile(f'red_pitaya_data_ch1_{t_file_ch1}.bin')
 
                     data_decoded = np.frombuffer(ch2_data, dtype=np.int16)
-                    data_calib = np.float32(self.ch2_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch2_offset))
+                    data_calib = np.float16(self.ch2_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch2_offset))
                     data_calib.tofile(f'red_pitaya_data_ch2_{t_file_ch2}.bin')
 
                     break
