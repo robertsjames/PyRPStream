@@ -163,6 +163,14 @@ class RPDevice:
                 # If we have DATA, exit if we have exceeded acquisition time
                 t = client_reply.reply['timestamp']
                 if t - t_start > acq_time:
+                    data_decoded = np.frombuffer(ch1_data, dtype=np.int16)
+                    data_calib = np.float32(self.ch1_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch1_offset))
+                    data_calib.tofile(f'red_pitaya_data_ch1_{t_file_ch1}.bin')
+
+                    data_decoded = np.frombuffer(ch2_data, dtype=np.int16)
+                    data_calib = np.float32(self.ch2_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch2_offset))
+                    data_calib.tofile(f'red_pitaya_data_ch2_{t_file_ch2}.bin')
+
                     break
 
                 # Otherwise,
@@ -179,9 +187,7 @@ class RPDevice:
                 if (ch1_reads * self.client.ch1_size * (32 / 16) > file_size):
                     data_decoded = np.frombuffer(ch1_data, dtype=np.int16)
                     data_calib = np.float32(self.ch1_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch1_offset))
-                    # data_calib.tofile(f'red_pitaya_data_ch1_{t_file_ch1}.bin')
-                    print(data_calib)
-                    data_calib.tofile('test.bin')
+                    data_calib.tofile(f'red_pitaya_data_ch1_{t_file_ch1}.bin')
                     ch1_data = bytearray()
                     ch1_reads = 0
                 if (ch2_reads * self.client.ch2_size * (32 / 16) > file_size):
