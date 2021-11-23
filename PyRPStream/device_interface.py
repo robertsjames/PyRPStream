@@ -105,7 +105,7 @@ class RPDevice:
         self.client.join()
 
 
-    def acquire(self, acq_time, file_size=250e6):
+    def acquire(self, acq_time, file_size=250e6, acquire_raw=False):
         """
         """
         if not self.client.alive.isSet():
@@ -185,15 +185,11 @@ class RPDevice:
                 ch2_reads += 1
 
                 if (ch1_reads * self.client.ch1_size * (32 / 16) > file_size):
-                    data_decoded = np.frombuffer(ch1_data, dtype=np.int16)
-                    data_calib = np.float32(self.ch1_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch1_offset))
-                    data_calib.tofile(f'red_pitaya_data_ch1_{t_file_ch1}.bin')
+                    self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=t_file_ch1)
                     ch1_data = bytearray()
                     ch1_reads = 0
                 if (ch2_reads * self.client.ch2_size * (32 / 16) > file_size):
-                    data_decoded = np.frombuffer(ch2_data, dtype=np.int16)
-                    data_calib = np.float32(self.ch2_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch2_offset))
-                    data_calib.tofile(f'red_pitaya_data_ch2_{t_file_ch2}.bin')
+                    self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=t_file_ch2)
                     ch2_data = bytearray()
                     ch2_reads = 0
 
@@ -231,8 +227,8 @@ class RPDevice:
             # If we have DATA, get the start acquisition time
             t_start = client_reply.reply['timestamp']
 
-        ch1_data_store = []
-        ch2_data_store = []
+        ch1_data = bytearray()
+        ch2_data = bytearray()
 
         # Loop to RECEIVE DATA, unless an ERROR occurs
         while True:
@@ -252,17 +248,40 @@ class RPDevice:
                     break
 
                 # Otherwise, append data
-                ch1_data = np.frombuffer(client_reply.reply['ch1_data'], dtype=np.int16)
-                ch2_data= np.frombuffer(client_reply.reply['ch2_data'], dtype=np.int16)
+                ch1_data += client_reply.reply['ch1_data']
+                ch2_data += client_reply.reply['ch2_data']
 
-                if not acquire_raw:
-                # Convert from ADC -> V, with calibration factors, by default
-                    ch1_data = self.ch1_gain * (ch1_data * self.input_range_V / 2. ** self.input_bits + self.ch1_offset)
-                    ch2_data = self.ch2_gain * (ch2_data * self.input_range_V / 2. ** self.input_bits + self.ch2_offset)
+        self.save_data(ch1_data, channel=1, calib=True, acquire_raw=acquire_raw)
+        self.save_data(ch2_data, channel=2, calib=True, acquire_raw=acquire_raw)
 
-                ch1_data_store = np.append(ch1_data_store, ch1_data)
-                ch2_data_store = np.append(ch2_data_store, ch2_data)
 
+    def save_data(self, data_bytes, channel=1, calib=False, acquire_raw=False, t_file=None):
+        """
+        """
+        try:
+            assert((channel == 1) or (channel == 2))
+        except:
+            raise ValueError('channel must be 1 or 2')
+
+        data = np.frombuffer(data_bytes, dtype=np.int16)
+
+        if not acquire_raw:
+        # Convert from ADC -> V, with calibration factors, by default
+            if channel == 1:
+                data = self.ch1_gain * (data * self.input_range_V / 2. ** self.input_bits + self.ch1_offset)
+            elif channel == 2:
+                data = self.ch2_gain * (data * self.input_range_V / 2. ** self.input_bits + self.ch2_offset)
+
+        if calib:
         # Save calibration data to files
-        np.savetxt('red_pitaya_data_ch1_calib.txt', ch1_data_store)
-        np.savetxt('red_pitaya_data_ch2_calib.txt', ch2_data_store)
+            if channel == 1:
+                np.savetxt('red_pitaya_data_ch1_calib.txt', data)
+            elif channel == 2:
+                np.savetxt('red_pitaya_data_ch2_calib.txt', data)
+        else:
+        # Save acquired data to files
+            try:
+                assert(t_file is not None)
+            except:
+                raise ValueError('Must supply timestamp when saving data outside of calibration mode')
+            data.tofile(f'red_pitaya_data_ch{channel}_{t_file}.bin')
