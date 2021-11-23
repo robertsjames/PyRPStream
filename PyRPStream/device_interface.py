@@ -105,7 +105,7 @@ class RPDevice:
         self.client.join()
 
 
-    def acquire(self, acq_time, file_size=1e6):
+    def acquire(self, acq_time, file_size=250e6):
         """
         """
         if not self.client.alive.isSet():
@@ -176,16 +176,18 @@ class RPDevice:
                 ch1_reads += 1
                 ch2_reads += 1
 
-                if (ch1_reads * self.client.ch1_size > file_size):
-                    f=open(f'red_pitaya_data_ch1_{t_file_ch1}.bin', 'wb')
-                    f.write(ch1_data)
-                    f.close()
+                if (ch1_reads * self.client.ch1_size * (32 / 16) > file_size):
+                    data_decoded = np.frombuffer(ch1_data, dtype=np.int16)
+                    data_calib = np.float32(self.ch1_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch1_offset))
+                    # data_calib.tofile(f'red_pitaya_data_ch1_{t_file_ch1}.bin')
+                    print(data_calib)
+                    data_calib.tofile('test.bin')
                     ch1_data = bytearray()
                     ch1_reads = 0
-                if (ch2_reads * self.client.ch2_size > file_size):
-                    f=open(f'red_pitaya_data_ch2_{t_file_ch2}.bin', 'wb')
-                    f.write(ch2_data)
-                    f.close()
+                if (ch2_reads * self.client.ch2_size * (32 / 16) > file_size):
+                    data_decoded = np.frombuffer(ch2_data, dtype=np.int16)
+                    data_calib = np.float32(self.ch2_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch2_offset))
+                    data_calib.tofile(f'red_pitaya_data_ch2_{t_file_ch2}.bin')
                     ch2_data = bytearray()
                     ch2_reads = 0
 
