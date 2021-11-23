@@ -163,14 +163,8 @@ class RPDevice:
                 # If we have DATA, exit if we have exceeded acquisition time
                 t = client_reply.reply['timestamp']
                 if t - t_start > acq_time:
-                    data_decoded = np.frombuffer(ch1_data, dtype=np.int16)
-                    data_calib = np.float16(self.ch1_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch1_offset))
-                    data_calib.tofile(f'red_pitaya_data_ch1_{t_file_ch1}.bin')
-
-                    data_decoded = np.frombuffer(ch2_data, dtype=np.int16)
-                    data_calib = np.float16(self.ch2_gain * (data_decoded  * self.input_range_V / 2 ** self.input_bits + self.ch2_offset))
-                    data_calib.tofile(f'red_pitaya_data_ch2_{t_file_ch2}.bin')
-
+                    self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=t_file_ch1)
+                    self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=t_file_ch2)
                     break
 
                 # Otherwise,
@@ -184,11 +178,11 @@ class RPDevice:
                 ch1_reads += 1
                 ch2_reads += 1
 
-                if (ch1_reads * self.client.ch1_size * (32 / 16) > file_size):
+                if (ch1_reads * self.client.ch1_size > file_size):
                     self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=t_file_ch1)
                     ch1_data = bytearray()
                     ch1_reads = 0
-                if (ch2_reads * self.client.ch2_size * (32 / 16) > file_size):
+                if (ch2_reads * self.client.ch2_size > file_size):
                     self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=t_file_ch2)
                     ch2_data = bytearray()
                     ch2_reads = 0
@@ -268,9 +262,9 @@ class RPDevice:
         if not acquire_raw:
         # Convert from ADC -> V, with calibration factors, by default
             if channel == 1:
-                data = self.ch1_gain * (data * self.input_range_V / 2. ** self.input_bits + self.ch1_offset)
+                data = np.float16(self.ch1_gain * (data * self.input_range_V / 2. ** self.input_bits + self.ch1_offset))
             elif channel == 2:
-                data = self.ch2_gain * (data * self.input_range_V / 2. ** self.input_bits + self.ch2_offset)
+                data = np.float16(self.ch2_gain * (data * self.input_range_V / 2. ** self.input_bits + self.ch2_offset))
 
         if calib:
         # Save calibration data to files

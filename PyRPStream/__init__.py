@@ -1,4 +1,4 @@
-__version__ = '0.10.1'
+__version__ = '0.10.2'
 __author__ = 'Robert James, Fiona Alder'
 __author_email__ = 'robert.james.19@ucl.ac.uk'
 
