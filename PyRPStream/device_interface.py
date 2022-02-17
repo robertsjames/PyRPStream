@@ -16,7 +16,7 @@ export, __all__ = rp.exporter()
 class RPDevice:
     """
     """
-    def __init__(self, name):
+    def __init__(self, name, address, port):
         # Device name
         self.name = name
         # Calibration parameters
@@ -33,7 +33,7 @@ class RPDevice:
             self.ch2_offset = 0.
             self.ch2_gain = 1.
         # Connection information
-        self.address_port = ('rp-f05a98.local', 8900)
+        self.address_port = (address, port)
         # Device information
         self.input_range_V = 2.
         self.input_bits = 16
