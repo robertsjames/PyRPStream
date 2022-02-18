@@ -105,7 +105,7 @@ class RPDevice:
         self.client.join()
 
 
-    def acquire(self, acq_time, file_size=250e6, acquire_raw=False):
+    def acquire(self, acq_time_s, file_size=250e6, acquire_raw=False):
         """
         """
         if not self.client.alive.isSet():
@@ -118,7 +118,7 @@ class RPDevice:
             raise OSError('Cannot acquire when not connected to device')
 
         try:
-            assert(acq_time > 0)
+            assert(acq_time_s > 0)
         except:
             raise TypeError('Invalid acquisition time value')
 
@@ -136,9 +136,9 @@ class RPDevice:
 
         elif client_reply.key == 'DATA':
             # If we have DATA, get the start acquisition time
-            t_start = client_reply.reply['timestamp']
+            t_start_ns = client_reply.reply['timestamp']
 
-        t_prev = t_start
+        t_prev_ns = t_start_ns
         i = 0
 
         ch1_data = bytearray()
@@ -161,17 +161,17 @@ class RPDevice:
 
             elif client_reply.key == 'DATA':
                 # If we have DATA, exit if we have exceeded acquisition time
-                t = client_reply.reply['timestamp']
-                if t - t_start > acq_time:
-                    self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=t_file_ch1)
-                    self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=t_file_ch2)
+                t_ns = client_reply.reply['timestamp']
+                if t_ns - t_start_ns > (acq_time_s * 1e9):
+                    self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=t_file_ch1_ns)
+                    self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=t_file_ch2_ns)
                     break
 
                 # Otherwise,
                 if ch1_reads == 0:
-                    t_file_ch1 = t
+                    t_file_ch1_ns = t_ns
                 if ch2_reads == 0:
-                    t_file_ch2 = t
+                    t_file_ch2_ns = t_ns
 
                 ch1_data += client_reply.reply['ch1_data']
                 ch2_data += client_reply.reply['ch2_data']
@@ -179,19 +179,19 @@ class RPDevice:
                 ch2_reads += 1
 
                 if (ch1_reads * self.client.ch1_size > file_size):
-                    self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=t_file_ch1)
+                    self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=t_file_ch1_ns)
                     ch1_data = bytearray()
                     ch1_reads = 0
                 if (ch2_reads * self.client.ch2_size > file_size):
-                    self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=t_file_ch2)
+                    self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=t_file_ch2_ns)
                     ch2_data = bytearray()
                     ch2_reads = 0
 
                 # Calculate the data rate every n_samp messages
                 if i == n_samp:
-                    print('Data rate is ', n_samp * 2**16 / (t - t_prev) / 1024 / 1024)  # MBytes/second
+                    print('Data rate is ', n_samp * 2**16 / (t_ns - t_prev_ns) / 1024 / 1024 * 1e9)  # MBytes/second
                     i = 0
-                    t_prev = t
+                    t_prev_ns = t_ns
 
                 i += 1
 
@@ -219,7 +219,7 @@ class RPDevice:
 
         elif client_reply.key == 'DATA':
             # If we have DATA, get the start acquisition time
-            t_start = client_reply.reply['timestamp']
+            t_start_ns = client_reply.reply['timestamp']
 
         ch1_data = bytearray()
         ch2_data = bytearray()
@@ -237,8 +237,8 @@ class RPDevice:
 
             elif client_reply.key == 'DATA':
                 # If we have DATA, exit if we have exceeded acquisition time
-                t = client_reply.reply['timestamp']
-                if t - t_start > 1: # Acquire for 1 second
+                t_ns = client_reply.reply['timestamp']
+                if t_ns - t_start_ns > 1e9: # Acquire for 1 second
                     break
 
                 # Otherwise, append data

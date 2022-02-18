@@ -149,7 +149,7 @@ class SocketClientThread(threading.Thread):
             reply.update({'ch2_data': ch2_bytes})
 
             # Store the timestamp in reply
-            reply.update({'timestamp': time.time()})
+            reply.update({'timestamp': time.time_ns()})
 
             # Put reply in the reply queue
             self.reply_q.put(self._data_reply(reply), block=True)
