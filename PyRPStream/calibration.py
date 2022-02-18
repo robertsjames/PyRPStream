@@ -14,12 +14,12 @@ export, __all__ = rp.exporter()
 class CalibUtil:
     """
     """
-    def __init__(self, device_name):
+    def __init__(self, device_name, device_address, device_port):
         # RP device
         self.device_name = device_name
-        self.device = rp.RPDevice(device_name)
+        self.device = rp.RPDevice(device_name, device_address, device_port)
         # RP device SSH connection information
-        self.user_host_password = ('root', 'rp-f05a98.local', 'root')
+        self.user_host_password = ('root', device_address, 'root')
         # Calibration parameters
         self.ch1_offset = 0.
         self.ch1_gain = 1.
