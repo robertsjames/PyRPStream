@@ -5,7 +5,7 @@ with open('requirements.txt') as f:
 
 setuptools.setup(
     name='PyRPStream',
-    version='0.11.0',
+    version='0.11.1',
     author='Robert James, Fiona Alder',
     author_email='robert.james.19@ucl.ac.uk',
     url='https://github.com/robertsjames/PyRPStream',
