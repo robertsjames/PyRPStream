@@ -51,7 +51,7 @@ class SocketClientThread(threading.Thread):
         controlled via the cmd_q queue attribute. Replies are placed in
         the reply_q queue attribute.
     """
-    def __init__(self):
+    def __init__(self, device_names):
         super(SocketClientThread, self).__init__()
 
         # Command and reply queues for communicating with the socket thread
@@ -61,15 +61,13 @@ class SocketClientThread(threading.Thread):
         self.alive = threading.Event()
         self.alive.set()
         # Socket connection attributes
-        self.connected = 0
-        self.socket = None
+        self.sockets = [socket.socket(socket.AF_INET, socket.SOCK_STREAM) for _ in range(len(device_names))]
+        self.connected = [False] * len(device_names)
+        self.device_names = device_names
         # Buffer reading attributes
         self.header_size = 60
         self.ch1_size = 32768
         self.ch2_size = 32768
-        # Data storage
-        self.data_all_ch1 = []
-        self.data_all_ch2 = []
         # Thread control handlers
         self.handlers = {
             'CONNECT': self._handle_CONNECT,
@@ -77,19 +75,20 @@ class SocketClientThread(threading.Thread):
             'CLOSE': self._handle_CLOSE
         }
 
-        print('Starting socket thread')
+        print('Starting socket thread with ' + str(len(self.sockets)) + ' devices')
 
 
     def run(self):
         """ Thread control function.
         """
         while self.alive.isSet():
-            if self.connected:
+            if all(self.connected) and self.connected:
                 # Default is to RECEIVE
-                command = ClientCommand('RECEIVE')
-                self.handlers[command.key](command)
+                # command = ClientCommand('RECEIVE')
+                # self.handlers[command.key](command)
+                time.sleep(0.1)
             else:
-                # Don't do anything if not connected
+                # Don't do anything if all devices not connected
                 time.sleep(0.1)
             try:
                 # Check if any commands have been sent to the thread
@@ -103,31 +102,34 @@ class SocketClientThread(threading.Thread):
     def join(self, timeout=None):
         """ Invoking this will end the thread.
         """
-        print('Ending socket thread')
+        print('Ending socket thread with ' + str(len(self.sockets)) + ' devices')
 
         self.alive.clear()
         threading.Thread.join(self, timeout)
 
 
     def _handle_CONNECT(self, client_command):
-        """ Attempt to connect to the socket, if not already connected
-        client_command should be a (host, port) tuple.
+        """ Attempt to connect to the sockets, if not already connected
+        client_command should be an array of (host, port) tuples.
         """
         try:
-            if self.connected == 0:
-                # Attempt to connect if not already connected
-                self.socket = socket.socket(
-                    socket.AF_INET, socket.SOCK_STREAM)
-                self.socket.connect((client_command.command[0], client_command.command[1]))
-                self.reply_q.put(self._message_reply('Socket connected'))
-                self.connected = 1
-            else:
-                # We are already connected, do nothing
-                self.reply_q.put(self._message_reply('Socket already connected'))
-        except OSError as e:
-            # Return error if we can't connect
-            self.reply_q.put(self._error_reply(str(e)))
-            self.connected = 0
+            assert len(self.device_names) == len(self.sockets) == len(self.connected) == len(client_command.command)
+        except:
+            raise ValueError('All arguments must be of the same length')
+        for i in range(len(self.device_names)):
+            try:
+                if not self.connected[i]:
+                    # Attempt to connect if not already connected
+                    self.sockets[i].connect((client_command.command[i][0], client_command.command[i][1]))
+                    self.reply_q.put(self._message_reply('Socket for ' + self.device_names[i] +  ' connected'))
+                    self.connected[i] = True
+                else:
+                    # We are already connected, do nothing
+                    self.reply_q.put(self._message_reply('Socket for ' + self.device_names[i] +  ' already connected'))
+            except OSError as e:
+                # Return error if we can't connect
+                self.reply_q.put(self._error_reply(str(e) + '. Problem device: ' + self.device_names[i]))
+                self.connected[i] = False
 
 
     def _handle_RECEIVE(self, client_command):
@@ -175,10 +177,15 @@ class SocketClientThread(threading.Thread):
     def _handle_CLOSE(self, client_command):
         """ Close connection to the socket.
         """
-        self.socket.close()
+        devices_closed = ''
+        for i in range(len(self.device_names)):
+            if self.connected[i]:
+                # Close the socket if it is connected
+                self.sockets[i].close()
+                self.connected[i] = False
+                devices_closed += (self.device_names[i] + ', ')
         self.reply_q.queue.clear()
-        self.reply_q.put(self._message_reply('Socket closed'))
-        self.connected = 0
+        self.reply_q.put(self._message_reply('Sockets closed for: ' + devices_closed))
 
 
     def _error_reply(self, errstr):

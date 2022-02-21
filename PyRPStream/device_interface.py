@@ -43,79 +43,112 @@ class RPDeviceCollection:
     def __init__(self):
         # Device collection
         self.device_collection = []
+        self.device_names = []
         # Socket thread
-        self.client = rp.SocketClientThread()
+        self.client = rp.SocketClientThread([])
         # Start the socket thread
         self.client.start()
 
 
     def add_device(self, device_name, device_address, device_port):
-        # Device collection
+        try:
+            assert isinstance(device_name, str)
+        except:
+            raise ValueError('device_name must be string')
+
+        try:
+            assert isinstance(device_address, str)
+        except:
+            raise ValueError('device_address must be string')
+
+        try:
+            assert isinstance(device_port, int)
+        except:
+            raise ValueError('device_port must be int')
+
+        # Add new device to device collection
         self.device_collection.append(RPDevice(device_name, device_address, device_port))
+        self.device_names.append(device_name)
 
 
-    # def connect(self):
-    #     """
-    #     """
-    #     if not self.client.alive.isSet():
-    #         # Create new socket thread
-    #         self.client = rp.SocketClientThread()
-    #         # Start the socket thread
-    #         self.client.start()
-    #
-    #     print('Trying to CONNECT to socket')
-    #     # Make 10 attempts, then give up
-    #     for i in range(10):
-    #         self.client.cmd_q.put(rp.ClientCommand('CONNECT', self.address_port))
-    #         client_reply = self.client.reply_q.get()
-    #
-    #         if client_reply.key == 'ERROR':
-    #             print(client_reply.reply)
-    #             print('Trying to CONNECT again')
-    #         elif client_reply.key == 'MESSAGE':
-    #             print(client_reply.reply)
-    #             break
-    #         else:
-    #             break
-    #
-    #     # Check if we are connected by attempting to RECEIVE
-    #     self.client.cmd_q.put(rp.ClientCommand('RECEIVE'))
-    #     client_reply = self.client.reply_q.get()
-    #     if client_reply.key == 'ERROR':
-    #         # We aren't connected: end the thread
-    #         print(client_reply.reply)
-    #         self.client.join()
-    #         raise OSError('Repeatedly failed to execute CONNECT: exiting')
-    #
-    #     time.sleep(1)
-    #
-    #
-    # def disconnect(self):
-    #     """
-    #     """
-    #     print('Trying to CLOSE socket connection')
-    #
-    #     if not self.client.alive.isSet():
-    #         # There is no thread
-    #         return
-    #
-    #     if not self.client.connected:
-    #         # We aren't connected: end the thread
-    #         self.client.join()
-    #         return
-    #
-    #     self.client.cmd_q.put(rp.ClientCommand('CLOSE'))
-    #
-    #     time.sleep(1)
-    #
-    #     # Get reply upon socket closure
-    #     client_reply = self.client.reply_q.get()
-    #     print(client_reply.reply)
-    #
-    #     # End the thread
-    #     self.client.join()
-    #
-    #
+    def initialise(self):
+        if self.client.alive.isSet():
+            # End the old thread if there is one
+            self.client.join()
+
+        # Socket thread
+        self.client = rp.SocketClientThread(self.device_names)
+        # Start the socket thread
+        self.client.start()
+
+
+    def connect(self):
+        """
+        """
+        if not self.client.alive.isSet():
+            # Create new socket thread
+            self.client = rp.SocketClientThread(self.device_names)
+            # Start the socket thread
+            self.client.start()
+
+        print('Trying to CONNECT to sockets')
+        # Make 10 attempts, then give up
+        for i in range(10):
+            self.client.cmd_q.put(rp.ClientCommand('CONNECT', [device.address_port for device in self.device_collection]))
+            client_replies = [self.client.reply_q.get() for device in self.device_collection]
+
+            for client_reply in client_replies:
+                print(client_reply.reply)
+
+            if any(client_reply.key == 'ERROR' for client_reply in client_replies):
+                print('Trying to CONNECT again')
+            elif all(client_reply.key == 'MESSAGE' for client_reply in client_replies):
+                break
+            else:
+                # Don't know how to handle this: disconnect from all connected sockets, end the thread
+                self.disconnect()
+                raise OSError('Unknown error when attempting to CONENCT: exiting')
+
+        # # Check if we are connected by attempting to RECEIVE
+        # self.client.cmd_q.put(rp.ClientCommand('RECEIVE'))
+        # client_replies = [self.client.reply_q.get() for _ in self.device_collection]
+        # if any(client_reply.key == 'ERROR' for client_reply in client_replies):
+        #     # We aren't connected to at least one device: end the thread
+        #     for client_reply in client_replies:
+        #         if client_reply.key == 'ERROR':
+        #             print(client_reply.reply)
+        #     self.client.join()
+        #     raise OSError('Repeatedly failed to execute CONNECT: exiting')
+        #
+        # time.sleep(1)
+
+
+    def disconnect(self):
+        """
+        """
+        print('Trying to CLOSE socket connection')
+
+        if not self.client.alive.isSet():
+            # There is no thread
+            return
+
+        if all(connected == False for connected in self.client.connected):
+            # We aren't connected to any devices: end the thread
+            self.client.join()
+            return
+
+        self.client.cmd_q.put(rp.ClientCommand('CLOSE'))
+
+        time.sleep(1)
+
+        # Get reply upon socket closure
+        client_reply = self.client.reply_q.get()
+        print(client_reply.reply)
+
+        # End the thread
+        self.client.join()
+
+
     # def acquire(self, acq_time_s, file_size=250e6, acquire_raw=False):
     #     """
     #     """
