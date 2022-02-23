@@ -9,6 +9,7 @@ import threading
 import queue
 import numpy as np
 import time
+import select
 
 import PyRPStream as rp
 export, __all__ = rp.exporter()
@@ -64,6 +65,7 @@ class SocketClientThread(threading.Thread):
         self.sockets = [socket.socket(socket.AF_INET, socket.SOCK_STREAM) for _ in range(len(device_names))]
         self.connected = [False] * len(device_names)
         self.device_names = device_names
+        self.name_address_dict = {}
         # Buffer reading attributes
         self.header_size = 60
         self.ch1_size = 32768
@@ -84,9 +86,8 @@ class SocketClientThread(threading.Thread):
         while self.alive.isSet():
             if all(self.connected) and self.connected:
                 # Default is to RECEIVE
-                # command = ClientCommand('RECEIVE')
-                # self.handlers[command.key](command)
-                time.sleep(0.1)
+                command = ClientCommand('RECEIVE')
+                self.handlers[command.key](command)
             else:
                 # Don't do anything if all devices not connected
                 time.sleep(0.1)
@@ -123,6 +124,7 @@ class SocketClientThread(threading.Thread):
                     self.sockets[i].connect((client_command.command[i][0], client_command.command[i][1]))
                     self.reply_q.put(self._message_reply('Socket for ' + self.device_names[i] +  ' connected'))
                     self.connected[i] = True
+                    self.name_address_dict[self.sockets[i].getpeername()[0]] = self.device_names[i]
                 else:
                     # We are already connected, do nothing
                     self.reply_q.put(self._message_reply('Socket for ' + self.device_names[i] +  ' already connected'))
@@ -138,27 +140,33 @@ class SocketClientThread(threading.Thread):
         """
         try:
             reply = {}
-
-            # Take the header information from the socket, then discard
-            header_bytes = self._receieve_bytes(self.header_size, self.socket)
-
-            # Take channel 1 data from the socket, store in reply
-            ch1_bytes = self._receieve_bytes(self.ch1_size, self.socket)
-            reply.update({'ch1_data': ch1_bytes})
-
-            # Take channel 2 data from the socket, store in reply
-            ch2_bytes = self._receieve_bytes(self.ch2_size, self.socket)
-            reply.update({'ch2_data': ch2_bytes})
-
-            # Store the timestamp in reply
-            reply.update({'timestamp': time.time_ns()})
+            socks, _, _ = select.select(self.sockets, [], [])
+            for sock in socks:
+                header_bytes = self._receieve_bytes(self.header_size, sock)
+                ch1_bytes = self._receieve_bytes(self.ch1_size, sock)
+                ch2_bytes = self._receieve_bytes(self.ch2_size, sock)
+                reply.update({self.name_address_dict[sock.getpeername()[0]]: ch1_bytes})
+            # for device_name, socket in zip(self.device_names, self.sockets):
+            #
+            #     # Take the header information from the socket, then discard
+            #     header_bytes = self._receieve_bytes(self.header_size, socket)
+            #
+            #     # Take channel 1 data from the socket, store in reply
+            #     ch1_bytes = self._receieve_bytes(self.ch1_size, socket)
+            #     reply.update({'ch1_data_' + device_name: ch1_bytes})
+            #
+            #     # Take channel 2 data from the socket, store in reply
+            #     ch2_bytes = self._receieve_bytes(self.ch2_size, socket)
+            #     reply.update({'ch2_data_' + device_name: ch2_bytes})
+            #
+            #     # Store the timestamp in reply
+            #     reply.update({'timestamp_' + device_name: time.time_ns()})
 
             # Put reply in the reply queue
             self.reply_q.put(self._data_reply(reply), block=True)
 
         except OSError as e:
             self.reply_q.put(self._error_reply(str(e)))
-            self.connected = 0
 
 
     def _receieve_bytes(self, n, socket):
