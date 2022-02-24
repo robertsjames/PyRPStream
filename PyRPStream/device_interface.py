@@ -40,12 +40,13 @@ class RPDevice:
 class RPDeviceCollection:
     """
     """
-    def __init__(self):
+    def __init__(self, triggered=False):
         # Device collection
-        self.device_collection = []
-        self.device_names = []
+        self.device_collection = {}
+        # Triggered or untriggered mode
+        self.triggered = triggered
         # Socket thread
-        self.client = rp.SocketClientThread([])
+        self.client = rp.SocketClientThread([], self.triggered)
         # Start the socket thread
         self.client.start()
 
@@ -67,8 +68,7 @@ class RPDeviceCollection:
             raise ValueError('device_port must be int')
 
         # Add new device to device collection
-        self.device_collection.append(RPDevice(device_name, device_address, device_port))
-        self.device_names.append(device_name)
+        self.device_collection[device_name] = RPDevice(device_name, device_address, device_port)
 
 
     def initialise(self):
@@ -77,7 +77,7 @@ class RPDeviceCollection:
             self.client.join()
 
         # Socket thread
-        self.client = rp.SocketClientThread(self.device_names)
+        self.client = rp.SocketClientThread(list(self.device_collection.keys()), self.triggered)
         # Start the socket thread
         self.client.start()
 
@@ -87,14 +87,14 @@ class RPDeviceCollection:
         """
         if not self.client.alive.isSet():
             # Create new socket thread
-            self.client = rp.SocketClientThread(self.device_names)
+            self.client = rp.SocketClientThread(list(self.device_collection.keys()), self.triggered)
             # Start the socket thread
             self.client.start()
 
         print('Trying to CONNECT to sockets')
         # Make 10 attempts, then give up
         for i in range(10):
-            self.client.cmd_q.put(rp.ClientCommand('CONNECT', [device.address_port for device in self.device_collection]))
+            self.client.cmd_q.put(rp.ClientCommand('CONNECT', [device.address_port for device in self.device_collection.values()]))
             client_replies = [self.client.reply_q.get() for device in self.device_collection]
 
             for client_reply in client_replies:
@@ -169,14 +169,14 @@ class RPDeviceCollection:
         # Number of messages to use for data rate calculation
         n_samp = 10
 
-        # Get reply from reply queue to obtain start time
-        client_reply = self.client.reply_q.get()
-
-        if client_reply.key == 'ERROR':
-            # Disconnect from all connected sockets, end the thread if we receive ERROR
-            print(client_reply.reply)
-            self.disconnect()
-            raise OSError('Error during RECEIVE: exiting')
+        # # Get reply from reply queue to obtain start time
+        # client_reply = self.client.reply_q.get()
+        #
+        # if client_reply.key == 'ERROR':
+        #     # Disconnect from all connected sockets, end the thread if we receive ERROR
+        #     print(client_reply.reply)
+        #     self.disconnect()
+        #     raise OSError('Error during RECEIVE: exiting')
 
         # elif client_reply.key == 'DATA':
         #     # If we have DATA, get the start acquisition time
@@ -192,29 +192,29 @@ class RPDeviceCollection:
         # t_file_ch1 = None
         # t_file_ch2 = None
 
-        device1_data = bytearray()
-        device1_reads = 0
-        device2_data = bytearray()
-        device2_reads = 0
+        print(list(self.device_collection.keys()))
+        device_data_ch1 = {key: bytearray() for key in list(self.device_collection.keys())}
+        device_data_ch2 = {key: bytearray() for key in list(self.device_collection.keys())}
+        device_reads = {key: 0 for key in list(self.device_collection.keys())}
 
         # Loop to RECEIVE DATA, unless an ERROR occurs
         while True:
             # Get reply from reply queue
             client_reply = self.client.reply_q.get()
 
-            # if client_reply.key == 'ERROR':
-            #     # End the thread if we receive ERROR
-            #     print(client_reply.reply)
-            #     self.client.join()
-            #     raise OSError('Error during RECEIVE: exiting')
-            #
+            if client_reply.key == 'ERROR':
+                # Disconnect from all connected sockets, end the thread if we receive ERROR
+                print(client_reply.reply)
+                self.disconnect()
+                raise OSError('Error during RECEIVE: exiting')
+
             # elif client_reply.key == 'DATA':
-            #     # If we have DATA, exit if we have exceeded acquisition time
-            #     t_ns = client_reply.reply['timestamp']
-            #     if t_ns - t_start_ns > (acq_time_s * 1e9):
-            #         self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=t_file_ch1_ns)
-            #         self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=t_file_ch2_ns)
-            #         break
+                # # If we have DATA, exit if we have exceeded acquisition time
+                # t_ns = client_reply.reply['timestamp']
+                # if t_ns - t_start_ns > (acq_time_s * 1e9):
+                #     self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=t_file_ch1_ns)
+                #     self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=t_file_ch2_ns)
+                #     break
 
                 # # Otherwise,
                 # if ch1_reads == 0:
@@ -222,21 +222,16 @@ class RPDeviceCollection:
                 # if ch2_reads == 0:
                 #     t_file_ch2_ns = t_ns
 
-                # ch1_data += client_reply.reply['ch1_data']
-                # ch2_data += client_reply.reply['ch2_data']
-                # ch1_reads += 1
-                # ch2_reads += 1
+            for device_name in client_reply.reply['replied_devices']:
+                device_data_ch1[device_name] += client_reply.reply[device_name + '_ch1']
+                device_data_ch2[device_name] += client_reply.reply[device_name + '_ch2']
+                device_reads[device_name] += 1
 
-            if 'og_rp' in client_reply.reply:
-                device1_data += client_reply.reply['og_rp']
-                device1_reads += 1
-            if 'ln_rp' in client_reply.reply:
-                device2_data += client_reply.reply['ln_rp']
-                device2_reads += 1
-
-            if (device1_reads * self.client.ch1_size > 1e6):
-                self.save_data(device1_data, channel=1, acquire_raw=acquire_raw, t_file='og_rp', device=self.device_collection[0])
-                self.save_data(device2_data, channel=1, acquire_raw=acquire_raw, t_file='ln_rp', device=self.device_collection[1])
+            if (all(reads * self.client.ch1_size > 1e6 for reads in device_reads.values())):
+                for device_name, ch1_data in device_data_ch1.items():
+                    self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=0, device=self.device_collection[device_name])
+                for device_name, ch2_data in device_data_ch2.items():
+                    self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=0, device=self.device_collection[device_name])
                 break
 
                 # if (ch1_reads * self.client.ch1_size > file_size):
@@ -344,4 +339,4 @@ class RPDeviceCollection:
                 assert(t_file is not None)
             except:
                 raise ValueError('Must supply timestamp when saving data outside of calibration mode')
-            data.tofile(f'red_pitaya_data_ch{channel}_{t_file}.bin')
+            data.tofile(f'red_pitaya_data_ch{channel}_{device.name}.bin')

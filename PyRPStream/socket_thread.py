@@ -52,7 +52,7 @@ class SocketClientThread(threading.Thread):
         controlled via the cmd_q queue attribute. Replies are placed in
         the reply_q queue attribute.
     """
-    def __init__(self, device_names):
+    def __init__(self, device_names, triggered=False):
         super(SocketClientThread, self).__init__()
 
         # Command and reply queues for communicating with the socket thread
@@ -70,10 +70,15 @@ class SocketClientThread(threading.Thread):
         self.header_size = 60
         self.ch1_size = 32768
         self.ch2_size = 32768
+        # Triggered or untriggered mode
+        self.triggered = triggered
+        # Triggering value for channel 2 for triggered mode (raw ADC counts)
+        self.trigger_value = 30000
         # Thread control handlers
         self.handlers = {
             'CONNECT': self._handle_CONNECT,
             'RECEIVE': self._handle_RECEIVE,
+            'RECEIVE_TRIGGERED': self._handle_RECEIVE_TRIGGERED,
             'CLOSE': self._handle_CLOSE
         }
 
@@ -85,8 +90,11 @@ class SocketClientThread(threading.Thread):
         """
         while self.alive.isSet():
             if all(self.connected) and self.connected:
-                # Default is to RECEIVE
-                command = ClientCommand('RECEIVE')
+                # Default is to RECEIVE (triggered or untriggered)
+                if self.triggered:
+                    command = ClientCommand('RECEIVE_TRIGGERED')
+                else:
+                    command = ClientCommand('RECEIVE')
                 self.handlers[command.key](command)
             else:
                 # Don't do anything if all devices not connected
@@ -140,12 +148,49 @@ class SocketClientThread(threading.Thread):
         """
         try:
             reply = {}
+            replied = []
+
+            socks, _, _ = select.select(self.sockets, [], [])
+            # Receieve from each socket when it becomes available
+            for sock in socks:
+                # Take the header information from the socket, then discard
+                header_bytes = self._receieve_bytes(self.header_size, sock)
+
+                # Store name of device socket is associated with
+                replied.append(self.name_address_dict[sock.getpeername()[0]])
+
+                # Take channel 1 data from the socket, store in reply
+                ch1_bytes = self._receieve_bytes(self.ch1_size, sock)
+                reply.update({self.name_address_dict[sock.getpeername()[0]] + '_ch1': ch1_bytes})
+
+                # Take channel 2 data from the socket, store in reply
+                ch2_bytes = self._receieve_bytes(self.ch2_size, sock)
+                reply.update({self.name_address_dict[sock.getpeername()[0]] + '_ch2': ch2_bytes})
+
+            # Store the names of all sockets that replied in the reply
+            reply.update({'replied_devices': replied})
+
+            # Put reply in the reply queue
+            self.reply_q.put(self._data_reply(reply), block=True)
+
+        except OSError as e:
+            self.reply_q.put(self._error_reply(str(e)))
+
+
+    def _handle_RECEIVE_TRIGGERED(self, client_command):
+        """ Read from the socket: discard the header information, then send
+        data from channel 1 and channel 2 to the reply queue.
+        """
+        try:
+            reply = {}
             socks, _, _ = select.select(self.sockets, [], [])
             for sock in socks:
                 header_bytes = self._receieve_bytes(self.header_size, sock)
                 ch1_bytes = self._receieve_bytes(self.ch1_size, sock)
                 ch2_bytes = self._receieve_bytes(self.ch2_size, sock)
-                reply.update({self.name_address_dict[sock.getpeername()[0]]: ch1_bytes})
+                rise = np.where(np.frombuffer(ch2_bytes, dtype=np.int16) > 32000)
+                if len(rise[0] > 0):
+                    reply.update({self.name_address_dict[sock.getpeername()[0]]: ch1_bytes[2*rise[0][0]::]})
             # for device_name, socket in zip(self.device_names, self.sockets):
             #
             #     # Take the header information from the socket, then discard
