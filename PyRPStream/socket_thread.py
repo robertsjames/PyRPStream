@@ -68,8 +68,7 @@ class SocketClientThread(threading.Thread):
         self.name_address_dict = {}
         # Buffer reading attributes
         self.header_size = 60
-        self.ch1_size = 32768
-        self.ch2_size = 32768
+        self.channel_size = 32768
         # Triggered or untriggered mode
         self.triggered = triggered
         # Triggering value for channel 2 for triggered mode (raw ADC counts)
@@ -160,15 +159,18 @@ class SocketClientThread(threading.Thread):
                 replied.append(self.name_address_dict[sock.getpeername()[0]])
 
                 # Take channel 1 data from the socket, store in reply
-                ch1_bytes = self._receieve_bytes(self.ch1_size, sock)
+                ch1_bytes = self._receieve_bytes(self.channel_size, sock)
                 reply.update({self.name_address_dict[sock.getpeername()[0]] + '_ch1': ch1_bytes})
 
                 # Take channel 2 data from the socket, store in reply
-                ch2_bytes = self._receieve_bytes(self.ch2_size, sock)
+                ch2_bytes = self._receieve_bytes(self.channel_size, sock)
                 reply.update({self.name_address_dict[sock.getpeername()[0]] + '_ch2': ch2_bytes})
 
             # Store the names of all sockets that replied in the reply
             reply.update({'replied_devices': replied})
+
+            # Store the timestamp in the reply
+            reply.update({'timestamp': time.time_ns()})
 
             # Put reply in the reply queue
             self.reply_q.put(self._data_reply(reply), block=True)
@@ -186,8 +188,8 @@ class SocketClientThread(threading.Thread):
             socks, _, _ = select.select(self.sockets, [], [])
             for sock in socks:
                 header_bytes = self._receieve_bytes(self.header_size, sock)
-                ch1_bytes = self._receieve_bytes(self.ch1_size, sock)
-                ch2_bytes = self._receieve_bytes(self.ch2_size, sock)
+                ch1_bytes = self._receieve_bytes(self.channel_size, sock)
+                ch2_bytes = self._receieve_bytes(self.channel_size, sock)
                 rise = np.where(np.frombuffer(ch2_bytes, dtype=np.int16) > 32000)
                 if len(rise[0] > 0):
                     reply.update({self.name_address_dict[sock.getpeername()[0]]: ch1_bytes[2*rise[0][0]::]})
@@ -204,8 +206,8 @@ class SocketClientThread(threading.Thread):
             #     ch2_bytes = self._receieve_bytes(self.ch2_size, socket)
             #     reply.update({'ch2_data_' + device_name: ch2_bytes})
             #
-            #     # Store the timestamp in reply
-            #     reply.update({'timestamp_' + device_name: time.time_ns()})
+                # # Store the timestamp in reply
+                # reply.update({'timestamp_' + device_name: time.time_ns()})
 
             # Put reply in the reply queue
             self.reply_q.put(self._data_reply(reply), block=True)

@@ -166,36 +166,15 @@ class RPDeviceCollection:
         except:
             raise TypeError('Invalid acquisition time value')
 
-        # Number of messages to use for data rate calculation
-        n_samp = 10
+        # Clear the queue before beginning acquisition
+        self.client.reply_q.queue.clear()
 
-        # # Get reply from reply queue to obtain start time
-        # client_reply = self.client.reply_q.get()
-        #
-        # if client_reply.key == 'ERROR':
-        #     # Disconnect from all connected sockets, end the thread if we receive ERROR
-        #     print(client_reply.reply)
-        #     self.disconnect()
-        #     raise OSError('Error during RECEIVE: exiting')
+        t_start_ns = None
 
-        # elif client_reply.key == 'DATA':
-        #     # If we have DATA, get the start acquisition time
-        #     t_start_ns = client_reply.reply['timestamp']
-
-        # t_prev_ns = t_start_ns
-        # i = 0
-
-        # ch1_data = bytearray()
-        # ch2_data = bytearray()
-        # ch1_reads = 0
-        # ch2_reads = 0
-        # t_file_ch1 = None
-        # t_file_ch2 = None
-
-        print(list(self.device_collection.keys()))
         device_data_ch1 = {key: bytearray() for key in list(self.device_collection.keys())}
         device_data_ch2 = {key: bytearray() for key in list(self.device_collection.keys())}
         device_reads = {key: 0 for key in list(self.device_collection.keys())}
+        device_timestamps = {key: None for key in list(self.device_collection.keys())}
 
         # Loop to RECEIVE DATA, unless an ERROR occurs
         while True:
@@ -208,48 +187,35 @@ class RPDeviceCollection:
                 self.disconnect()
                 raise OSError('Error during RECEIVE: exiting')
 
-            # elif client_reply.key == 'DATA':
-                # # If we have DATA, exit if we have exceeded acquisition time
-                # t_ns = client_reply.reply['timestamp']
-                # if t_ns - t_start_ns > (acq_time_s * 1e9):
-                #     self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=t_file_ch1_ns)
-                #     self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=t_file_ch2_ns)
-                #     break
+            elif client_reply.key == 'DATA':
+                # If we have DATA, exit if we have exceeded acquisition time
+                t_ns = client_reply.reply['timestamp']
+                if t_start_ns is None:
+                    t_start_ns = t_ns
+                if t_ns - t_start_ns > (acq_time_s * 1e9):
+                    for device_name, ch1_data in device_data_ch1.items():
+                        self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=device_timestamps[device_name], device=self.device_collection[device_name])
+                    for device_name, ch2_data in device_data_ch2.items():
+                        self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=device_timestamps[device_name], device=self.device_collection[device_name])
+                    break
 
-                # # Otherwise,
-                # if ch1_reads == 0:
-                #     t_file_ch1_ns = t_ns
-                # if ch2_reads == 0:
-                #     t_file_ch2_ns = t_ns
+                # If this is the first read for any device, save the timestamp for that device
+                for device_name, reads in device_reads.items():
+                    if reads == 0:
+                        device_timestamps[device_name] = t_ns
 
-            for device_name in client_reply.reply['replied_devices']:
-                device_data_ch1[device_name] += client_reply.reply[device_name + '_ch1']
-                device_data_ch2[device_name] += client_reply.reply[device_name + '_ch2']
-                device_reads[device_name] += 1
+                for device_name in client_reply.reply['replied_devices']:
+                    device_data_ch1[device_name] += client_reply.reply[device_name + '_ch1']
+                    device_data_ch2[device_name] += client_reply.reply[device_name + '_ch2']
+                    device_reads[device_name] += 1
 
-            if (all(reads * self.client.ch1_size > 1e6 for reads in device_reads.values())):
-                for device_name, ch1_data in device_data_ch1.items():
-                    self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=0, device=self.device_collection[device_name])
-                for device_name, ch2_data in device_data_ch2.items():
-                    self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=0, device=self.device_collection[device_name])
-                break
-
-                # if (ch1_reads * self.client.ch1_size > file_size):
-                #     self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=t_file_ch1_ns)
-                #     ch1_data = bytearray()
-                #     ch1_reads = 0
-                # if (ch2_reads * self.client.ch2_size > file_size):
-                #     self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=t_file_ch2_ns)
-                #     ch2_data = bytearray()
-                #     ch2_reads = 0
-        #
-        #         # Calculate the data rate every n_samp messages
-        #         if i == n_samp:
-        #             print('Data rate is ', n_samp * 2**16 / (t_ns - t_prev_ns) / 1024 / 1024 * 1e9)  # MBytes/second
-        #             i = 0
-        #             t_prev_ns = t_ns
-        #
-        #         i += 1
+                for device_name, reads in device_reads.items():
+                    if (reads * self.client.channel_size > file_size):
+                        self.save_data(device_data_ch1[device_name], channel=1, acquire_raw=acquire_raw, t_file=device_timestamps[device_name], device=self.device_collection[device_name])
+                        device_data_ch1[device_name] = bytearray()
+                        self.save_data(device_data_ch2[device_name], channel=2, acquire_raw=acquire_raw, t_file=device_timestamps[device_name], device=self.device_collection[device_name])
+                        device_data_ch2[device_name] = bytearray()
+                        device_reads[device_name] = 0
 
 
     # def acquire_calib(self, acquire_raw=False):
@@ -339,4 +305,4 @@ class RPDeviceCollection:
                 assert(t_file is not None)
             except:
                 raise ValueError('Must supply timestamp when saving data outside of calibration mode')
-            data.tofile(f'red_pitaya_data_ch{channel}_{device.name}.bin')
+            data.tofile(f'red_pitaya_data_ch{channel}_{device.name}_{t_file}.bin')
