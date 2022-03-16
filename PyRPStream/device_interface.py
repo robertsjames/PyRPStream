@@ -195,8 +195,9 @@ class RPDeviceCollection:
                 if t_ns - t_start_ns > (acq_time_s * 1e9):
                     for device_name, ch1_data in device_data_ch1.items():
                         self.save_data(ch1_data, channel=1, acquire_raw=acquire_raw, t_file=device_timestamps[device_name], device=self.device_collection[device_name])
-                    for device_name, ch2_data in device_data_ch2.items():
-                        self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=device_timestamps[device_name], device=self.device_collection[device_name])
+                    if not self.triggered:
+                        for device_name, ch2_data in device_data_ch2.items():
+                            self.save_data(ch2_data, channel=2, acquire_raw=acquire_raw, t_file=device_timestamps[device_name], device=self.device_collection[device_name])
                     break
 
                 # If this is the first read for any device, save the timestamp for that device
@@ -206,15 +207,17 @@ class RPDeviceCollection:
 
                 for device_name in client_reply.reply['replied_devices']:
                     device_data_ch1[device_name] += client_reply.reply[device_name + '_ch1']
-                    device_data_ch2[device_name] += client_reply.reply[device_name + '_ch2']
+                    if not self.triggered:
+                        device_data_ch2[device_name] += client_reply.reply[device_name + '_ch2']
                     device_reads[device_name] += 1
 
                 for device_name, reads in device_reads.items():
                     if (reads * self.client.channel_size > file_size):
                         self.save_data(device_data_ch1[device_name], channel=1, acquire_raw=acquire_raw, t_file=device_timestamps[device_name], device=self.device_collection[device_name])
                         device_data_ch1[device_name] = bytearray()
-                        self.save_data(device_data_ch2[device_name], channel=2, acquire_raw=acquire_raw, t_file=device_timestamps[device_name], device=self.device_collection[device_name])
-                        device_data_ch2[device_name] = bytearray()
+                        if not self.triggered:
+                            self.save_data(device_data_ch2[device_name], channel=2, acquire_raw=acquire_raw, t_file=device_timestamps[device_name], device=self.device_collection[device_name])
+                            device_data_ch2[device_name] = bytearray()
                         device_reads[device_name] = 0
 
 

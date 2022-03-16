@@ -71,6 +71,7 @@ class SocketClientThread(threading.Thread):
         self.channel_size = 32768
         # Triggered or untriggered mode
         self.triggered = triggered
+        self.has_triggered = {}
         # Triggering value for channel 2 for triggered mode (raw ADC counts)
         self.trigger_value = 30000
         # Thread control handlers
@@ -132,6 +133,7 @@ class SocketClientThread(threading.Thread):
                     self.reply_q.put(self._message_reply('Socket for ' + self.device_names[i] +  ' connected'))
                     self.connected[i] = True
                     self.name_address_dict[self.sockets[i].getpeername()[0]] = self.device_names[i]
+                    self.has_triggered[self.device_names[i]] = False
                 else:
                     # We are already connected, do nothing
                     self.reply_q.put(self._message_reply('Socket for ' + self.device_names[i] +  ' already connected'))
@@ -185,29 +187,36 @@ class SocketClientThread(threading.Thread):
         """
         try:
             reply = {}
+            replied = []
+
             socks, _, _ = select.select(self.sockets, [], [])
+            # Receieve from each socket when it becomes available
             for sock in socks:
+                # Take the header information from the socket, then discard
                 header_bytes = self._receieve_bytes(self.header_size, sock)
+
+                # Take channel 1 data from the socket
                 ch1_bytes = self._receieve_bytes(self.channel_size, sock)
+                # Take channel 2 data from the socket
                 ch2_bytes = self._receieve_bytes(self.channel_size, sock)
-                rise = np.where(np.frombuffer(ch2_bytes, dtype=np.int16) > 32000)
-                if len(rise[0] > 0):
-                    reply.update({self.name_address_dict[sock.getpeername()[0]]: ch1_bytes[2*rise[0][0]::]})
-            # for device_name, socket in zip(self.device_names, self.sockets):
-            #
-            #     # Take the header information from the socket, then discard
-            #     header_bytes = self._receieve_bytes(self.header_size, socket)
-            #
-            #     # Take channel 1 data from the socket, store in reply
-            #     ch1_bytes = self._receieve_bytes(self.ch1_size, socket)
-            #     reply.update({'ch1_data_' + device_name: ch1_bytes})
-            #
-            #     # Take channel 2 data from the socket, store in reply
-            #     ch2_bytes = self._receieve_bytes(self.ch2_size, socket)
-            #     reply.update({'ch2_data_' + device_name: ch2_bytes})
-            #
-                # # Store the timestamp in reply
-                # reply.update({'timestamp_' + device_name: time.time_ns()})
+
+                # Find the points in channnel 2 where the acquisition trigger threshold has been exceeded
+                acquire = np.where(np.frombuffer(ch2_bytes, dtype=np.int16) > self.trigger_value)
+                if len(acquire[0] > 0):
+                    if self.has_triggered[self.name_address_dict[sock.getpeername()[0]]] == True:
+                        assert(len(acquire[0]) == self.channel_size / 2)
+                    self.has_triggered[self.name_address_dict[sock.getpeername()[0]]] = True
+                    # We surpassed the channel 2 acquisition trigger threshold during this acquisition - save everything on channel 1 since the first point this happened
+                    reply.update({self.name_address_dict[sock.getpeername()[0]] + '_ch1': ch1_bytes[2 * acquire[0][0]::]}) # one int16 is 2 bytes
+
+                    # Store name of device socket is associated with
+                    replied.append(self.name_address_dict[sock.getpeername()[0]])
+
+            # Store the names of all sockets that replied in the reply
+            reply.update({'replied_devices': replied})
+
+            # Store the timestamp in the reply - this will not be accurate up to the level of the synchronisation correction
+            reply.update({'timestamp': time.time_ns()})
 
             # Put reply in the reply queue
             self.reply_q.put(self._data_reply(reply), block=True)
